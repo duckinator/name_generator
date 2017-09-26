@@ -1,6 +1,8 @@
 require "name_generator/version"
 
 module NameGenerator
+  NameTooShort = Class.new(StandardError)
+
   LETTERS = ("a".."z").to_a
   ACCEPTABLE_AFTER =
     begin
@@ -10,11 +12,37 @@ module NameGenerator
       vowels = %w[a e i o u]
       consonants = az - vowels
 
-      aa = {}
-      aa[/[aeiou]/] = consonants
-      aa[/c/]     = "ckaeiou"
-      aa[/[bdfk]/]  = "aeiou"
-      aa[/[bcdfghjklmnpqrstvwxyz]/] = vowels
+      l = ->(str) { str.split("") }
+
+      aa = {
+        /[aeiou]/ => consonants,
+        /a/ => l.("bcdefgilmnoprstvwxz"),
+        /b/ => vowels,
+        /c/ => l.("hkaeiou"),
+        /d/ => vowels,
+        /e/ => l.("ae"),
+        /f/ => l.("aefilou"),
+        /g/ => l.("aehiou"),
+        /h/ => vowels,
+        /i/ => l.("bcdefgklmnopqrstvxz"),
+        /j/ => vowels,
+        /k/ => vowels,
+        /l/ => vowels + ["l"],
+        /m/ => vowels + ["m"],
+        /n/ => vowels + ["n"],
+        /o/ => l.("aiou"),
+        /p/ => vowels + ["p"],
+        /q/ => ["u"],
+        /r/ => vowels + l.("bcdfgklmnpqrstvy"),
+        /s/ => vowels + l.("lmst"),
+        /t/ => vowels + ["c"],
+        /u/ => vowels + l.("bcdfgimrstv"),
+        /v/ => vowels,
+        /w/ => vowels,
+        /x/ => vowels,
+        /y/ => nil,
+        /z/ => nil,
+      }
 
       aa
     end.freeze
@@ -29,6 +57,9 @@ module NameGenerator
     while result.length < length
       current = LETTERS.sample
 
+      # Break if nothing can follow.
+      break if !result.empty? && LETTERS.all? { |l| !can_follow?(result[-1], l) }
+
       if options["debug"]
         puts "can_follow?(#{result[-1].inspect}, #{current.inspect}) #=> #{can_follow?(result[-1], current)}"
       end
@@ -40,12 +71,21 @@ module NameGenerator
       end
     end
 
+    # HACK: Yes, this is very gross.
+    raise NameTooShort if result.length < min_length
+
     result
+  rescue NameTooShort
+    if options[:debug]
+      warn "#{result.inspect} is too short and cannot be expanded; retrying."
+    end
+
+    retry
   end
 
   def self.can_follow?(previous, current)
     ACCEPTABLE_AFTER.any? { |regex, value|
-      (previous =~ regex) && value.include?(current)
+      (previous =~ regex) && value && value.include?(current)
     }
   end
   private_class_method :can_follow?
