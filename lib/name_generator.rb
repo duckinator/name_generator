@@ -1,7 +1,19 @@
 require "name_generator/version"
 
 module NameGenerator
-  NameTooShort = Class.new(StandardError)
+  NameTooShortError = Class.new(StandardError)
+  InvalidNameError  = Class.new(StandardError)
+
+  # Not technically invalid, just not things I think make good names.
+  # I'm not good at naming things.
+  # (As you may have guessed.)
+  INVALID_ENDINGS = %w[
+    ae
+    ai
+    ao
+    au
+    qu
+  ]
 
   LETTERS = ("a".."z").to_a
   ACCEPTABLE_AFTER =
@@ -28,9 +40,11 @@ module NameGenerator
         /[^rf]f$/ => vowels + l.("fl"),
 
         /g$/ => l.("aehiou"),
-        /h$/ => vowels,
+        /h$/ => vowels + ["y"],
         /i$/ => l.("bcdefgklmnopqrstvxz"),
+
         /j$/ => vowels,
+
         /k/  => vowels,
 
         # l can be followed by vowels always, or l if it's preceded by a vowel.
@@ -95,15 +109,26 @@ module NameGenerator
       elsif options["debug"]
         warn "Cannot append #{current} to #{result}."
       end
+
+      # 25% chance if breaking the loop if we've met or exceeded min_length
+      # and the current name is valid.
+      break if rand(1..100) <= 25 && length >= min_length && valid_name?(name)
     end
 
     # HACK: Yes, this is very gross.
-    raise NameTooShort if result.length < min_length
+    raise NameTooShortError if result.length < min_length
+    raise InvalidNameError  if !valid_name?(result)
 
     result
-  rescue NameTooShort
+  rescue NameTooShortError
     if options[:debug]
       warn "#{result.inspect} is too short and cannot be expanded; retrying."
+    end
+
+    retry
+  rescue InvalidNameError
+    if options[:debug]
+      warn "#{result.inspect} is an invalid name; retrying."
     end
 
     retry
@@ -115,4 +140,9 @@ module NameGenerator
     }
   end
   private_class_method :can_follow?
+
+  def self.valid_name?(name)
+    INVALID_ENDINGS.none? { |ending| name.end_with?(ending) }
+  end
+  private_class_method :valid_name?
 end
