@@ -73,8 +73,8 @@ module NameGenerator
     end.freeze
 
   def self.call(options)
-    min_length = options["min_length"]
-    max_length = options["max_length"]
+    min_length = Integer(options["min_length"])
+    max_length = Integer(options["max_length"])
 
     length = rand(min_length..max_length)
     result = ""
