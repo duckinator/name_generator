@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+require "name_generator"
+
+def parse_args(args)
+  arguments = {
+    "min_length" => 5,
+    "max_length" => 10,
+    "debug" => false,
+  }
+
+  args.each do |arg|
+    key, value = arg.split('=', 2)
+    # You can technically do `name_generator min-length=5` and it'll work.
+    # I don't really care enough to fix this, though.
+    key = key.gsub(/^--/, '').gsub('-', '_')
+
+    if value.nil?
+      # HACK: yes, I know this isn't technically the correct usage of ArgumentError.
+      raise ArgumentError, "invalid argument: #{arg} (no value provided)"
+    elsif !arguments.has_key?(key)
+      raise ArgumentError, "unknown argument: #{key}"
+    end
+
+    arguments[key] = value
+  end
+
+  arguments
+end
+
+options = parse_args(ARGV)
+
+puts NameGenerator.call(options)
