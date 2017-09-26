@@ -15,33 +15,58 @@ module NameGenerator
       l = ->(str) { str.split("") }
 
       aa = {
-        /[aeiou]/ => consonants,
-        /a/ => l.("bcdefgilmnoprstvwxz"),
-        /b/ => vowels,
-        /c/ => l.("hkaeiou"),
-        /d/ => vowels,
-        /e/ => l.("ae"),
-        /f/ => l.("aefilou"),
-        /g/ => l.("aehiou"),
-        /h/ => vowels,
-        /i/ => l.("bcdefgklmnopqrstvxz"),
-        /j/ => vowels,
-        /k/ => vowels,
-        /l/ => vowels + ["l"],
-        /m/ => vowels + ["m"],
-        /n/ => vowels + ["n"],
-        /o/ => l.("aiou"),
-        /p/ => vowels + ["p"],
-        /q/ => ["u"],
-        /r/ => vowels + l.("bcdfgklmnpqrstvy"),
-        /s/ => vowels + l.("lmst"),
-        /t/ => vowels + ["c"],
-        /u/ => vowels + l.("bcdfgimrstv"),
-        /v/ => vowels,
-        /w/ => vowels,
-        /x/ => vowels,
-        /y/ => nil,
-        /z/ => nil,
+        /^$/      => az,
+        /[aeiou]$/ => consonants,
+        /b$/     => vowels,
+        /^c$/    => l.("haeiou"),
+        /^.c$/   => l.("hkaeiou"),
+        /d$/     => vowels,
+        /[^aeiou]e$/ => l.("ae"),
+
+        /^f$/    => vowels + l.("fl"),
+        /ff$/    => vowels + ["l"],
+        /[^rf]f$/ => vowels + l.("fl"),
+
+        /g$/ => l.("aehiou"),
+        /h$/ => vowels,
+        /i$/ => l.("bcdefgklmnopqrstvxz"),
+        /j$/ => vowels,
+        /k/  => vowels,
+
+        # l can be followed by vowels always, or l if it's preceded by a vowel.
+        /^l$/   => vowels,
+        /^[aeiou]l$/ => vowels + ["l"],
+
+        /(^|m)$/ => vowels,
+        /[^m]m$/ => vowels + ["m"],
+
+        /(^|n)n$/ => vowels,
+        /[^n]n$/ => vowels + ["n"],
+
+        /[^aeiou]o$/ => consonants + l.("aou"),
+        /^[aeiou]o$/ => consonants,
+
+        /p$/ => vowels + ["p"],
+        /q$/ => ["u"],
+
+        # r can only be followed by vowels if it's the first letter.
+        /^r$/ => vowels,
+        /.r$/ => vowels + l.("bcdfgklmnpqrstvy"),
+
+        # no double-s at the start of words.
+        /^s$/ => vowels + l.("hlmt"),
+        /ss$/ => vowels,
+        /^[^s]s$/ => vowels + l.("hlmt"),
+
+        /^t$/ => vowels,
+        /.t$/ => vowels + ["c"],
+
+        /u$/ => vowels + l.("bcdfgimrstv"),
+        /v$/ => vowels,
+        /w$/ => vowels,
+        /x$/ => vowels,
+        /y$/ => nil,
+        /z$/ => nil,
       }
 
       aa
@@ -55,16 +80,17 @@ module NameGenerator
     result = ""
 
     while result.length < length
-      current = LETTERS.sample
+      valid = LETTERS.select { |l| can_follow?(result, l) }
+      current = valid.sample
 
       # Break if nothing can follow.
-      break if !result.empty? && LETTERS.all? { |l| !can_follow?(result[-1], l) }
+      break if !result.empty? && valid.empty?
 
       if options["debug"]
-        puts "can_follow?(#{result[-1].inspect}, #{current.inspect}) #=> #{can_follow?(result[-1], current)}"
+        puts "can_follow?(#{result.inspect}, #{current.inspect}) #=> #{can_follow?(result[-1], current)}"
       end
 
-      if result.empty? || can_follow?(result[-1], current)
+      if result.empty? || can_follow?(result, current)
         result << current
       elsif options["debug"]
         warn "Cannot append #{current} to #{result}."
@@ -83,9 +109,9 @@ module NameGenerator
     retry
   end
 
-  def self.can_follow?(previous, current)
+  def self.can_follow?(result, current)
     ACCEPTABLE_AFTER.any? { |regex, value|
-      (previous =~ regex) && value && value.include?(current)
+      (result =~ regex) && value && value.include?(current)
     }
   end
   private_class_method :can_follow?
