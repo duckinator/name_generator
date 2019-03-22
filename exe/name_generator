@@ -2,13 +2,15 @@
 
 require "name_generator"
 
+DEFAULTS = {
+  "min_length" => 5,
+  "max_length" => 10,
+  "debug" => false,
+  "num_words" => 1,
+}
+
 def parse_args(args)
-  arguments = {
-    "min_length" => 5,
-    "max_length" => 10,
-    "debug" => false,
-    "num_words" => 1,
-  }
+  arguments = DEFAULTS.clone
 
   args.each do |arg|
     key, value = arg.split('=', 2)
@@ -27,6 +29,10 @@ def parse_args(args)
   end
 
   arguments
+end
+
+if ARGV.include?('--help') || ARGV.include?('-h')
+  abort "#{$0} [ARGS]\n\nDefault arguments:\n#{DEFAULTS.map {|k, v| "  #{k}=#{v}"}.join("\n")}"
 end
 
 options = parse_args(ARGV)
