@@ -8,6 +8,7 @@ def parse_args(args)
     "max_length" => 10,
     "debug" => false,
     "num_words" => 1,
+    "seed" => nil,
   }
 
   args.each do |arg|

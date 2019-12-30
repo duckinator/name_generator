@@ -1,84 +1,81 @@
 require "name_generator/version"
 
 module NameGenerator
-  NameTooShortError = Class.new(StandardError)
-  InvalidNameError  = Class.new(StandardError)
+  Retry = Class.new(Exception)
 
-  # Not technically invalid, just not things I think make good names.
-  # I'm not good at naming things.
-  # (As you may have guessed.)
-  INVALID_ENDINGS = %w[
+  # These don't sound great at the end of a name.
+  UNWANTED_ENDINGS = %w[
     ae
     ai
     ao
     au
     qu
+    pp
   ]
 
   LETTERS = ("a".."z").to_a
+  VOWELS = %w[a e i o u]
+  CONSONANTS = LETTERS - VOWELS
   ACCEPTABLE_AFTER =
     begin
-      # I have no idea how correct these are, I'm just bullshitting it
-      # based on what sounds good to me.
-      az = LETTERS
-      vowels = %w[a e i o u]
-      consonants = az - vowels
-
       l = ->(str) { str.split("") }
 
       aa = {
-        /^$/      => az,
-        /[aeiou]$/ => consonants,
-        /b$/     => vowels,
-        /^c$/    => l.("haeiou"),
-        /^.c$/   => l.("hkaeiou"),
-        /d$/     => vowels,
-        /[^aeiou]e$/ => l.("ae"),
+        /^$/        => LETTERS,
+        /^[#{VOWELS}]$/     => CONSONANTS,
+        /^[#{CONSONANTS}]$/ => VOWELS,
+        /b$/        => VOWELS,
+        /^c$/       => %w[h   a e i o u],
+        /^.c$/      => %w[h k a e i o u],
+        /d$/        => VOWELS,
+        /[^#{VOWELS}]e$/ => %w[a e],
 
-        /^f$/    => vowels + l.("fl"),
-        /ff$/    => vowels + ["l"],
-        /[^rf]f$/ => vowels + l.("fl"),
+        /^f$/       => VOWELS + %w[  l],
+        /ff$/       => VOWELS + %w[  l],
+        /[^rf]f$/   => VOWELS + %w[f l],
 
-        /g$/ => l.("aehiou"),
-        /h$/ => vowels + ["y"],
-        /i$/ => l.("bcdefgklmnopqrstvxz"),
+        /g$/        => %w[h a e i o u],
+        /h$/        => VOWELS + ["y"],
+        /i$/        => LETTERS - %w[a h i j u y],
 
-        /j$/ => vowels,
+        /j$/        => VOWELS,
 
-        /k/  => vowels,
+        # TODO: Is this supposed to be anchored (e.g. ^k or $k)?
+        /k/         => VOWELS,
 
-        # l can be followed by vowels always, or l if it's preceded by a vowel.
-        /^l$/   => vowels,
-        /^[aeiou]l$/ => vowels + ["l"],
+        # l can be followed by VOWELS always, or l if it's preceded by a vowel.
+        /^l$/       => VOWELS,
+        /^[aeiou]l$/ => VOWELS + ["l"],
 
-        /(^|m)$/ => vowels,
-        /[^m]m$/ => vowels + ["m"],
+        /^m$/       => VOWELS,
+        /mm$/       => VOWELS,
+        /[^m]m$/    => VOWELS + ["m"],
 
-        /(^|n)n$/ => vowels,
-        /[^n]n$/ => vowels + ["n"],
+        /(^|n)n$/   => VOWELS,
+        /[^n]n$/    => VOWELS + ["n"],
 
-        /[^aeiou]o$/ => consonants + l.("aou"),
-        /^[aeiou]o$/ => consonants,
+        /[^aeiou]o$/ => CONSONANTS + %w[a o u],
+        /^[aeiou]o$/ => CONSONANTS,
 
-        /p$/ => vowels + ["p"],
-        /q$/ => ["u"],
+        /p$/ => VOWELS + %w[p],
+        /q$/ => %w[u],
 
-        # r can only be followed by vowels if it's the first letter.
-        /^r$/ => vowels,
-        /.r$/ => vowels + l.("bcdfgklmnpqrstvy"),
+        # r can be followed only by VOWELS if it's the first letter.
+        /^r$/ => VOWELS,
+        /.r$/ => LETTERS - %w[h j z],
 
-        # no double-s at the start of words.
-        /^s$/ => vowels + l.("hlmt"),
-        /ss$/ => vowels,
-        /^[^s]s$/ => vowels + l.("hlmt"),
+        # s can be followed only by VOWELS if it's the first letter.
+        /^s$/     => VOWELS + l.("hlmt"),
+        /ss$/     => VOWELS,
+        /^[^s]s$/ => VOWELS + l.("hlmt"),
 
-        /^t$/ => vowels,
-        /.t$/ => vowels + ["c"],
+        /^t$/ => VOWELS,
+        /.t$/ => VOWELS + ["c"],
 
-        /u$/ => vowels + l.("bcdfgimrstv"),
-        /v$/ => vowels,
-        /w$/ => vowels,
-        /x$/ => vowels,
+        /u$/ => VOWELS + l.("bcdfgimrstv"),
+        /v$/ => VOWELS,
+        /w$/ => VOWELS,
+        /x$/ => VOWELS,
         /y$/ => nil,
         /z$/ => nil,
       }
@@ -91,10 +88,14 @@ module NameGenerator
     max_length = Integer(options["max_length"])
 
     length = rand(min_length..max_length)
-    result = ""
+    result = options["seed"] || ""
 
-    while result.length < length
+    loop do
+      break if result.length >= length
+
       valid = LETTERS.select { |l| can_follow?(result, l) }
+      break if valid.nil?
+
       current = valid.sample
 
       # Break if nothing can follow.
@@ -116,21 +117,18 @@ module NameGenerator
     end
 
     # HACK: Yes, this is very gross.
-    raise NameTooShortError if result.length < min_length
-    raise InvalidNameError  if !valid_name?(result)
+    if result.length < min_length
+      warn "#{result.inspect} is too short; retrying." if options[:debug]
+      raise Retry
+    end
+
+    if !valid_name?(result)
+      warn "#{result.inspect} is an invalid name; retrying." if options[:debug]
+      raise Retry
+    end
 
     result
-  rescue NameTooShortError
-    if options[:debug]
-      warn "#{result.inspect} is too short and cannot be expanded; retrying."
-    end
-
-    retry
-  rescue InvalidNameError
-    if options[:debug]
-      warn "#{result.inspect} is an invalid name; retrying."
-    end
-
+  rescue Retry
     retry
   end
 
@@ -142,7 +140,7 @@ module NameGenerator
   private_class_method :can_follow?
 
   def self.valid_name?(name)
-    INVALID_ENDINGS.none? { |ending| name.end_with?(ending) }
+    UNWANTED_ENDINGS.none? { |ending| name.end_with?(ending) }
   end
   private_class_method :valid_name?
 end
